@@ -3,20 +3,63 @@ on: [push]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build APK with Buildozer Docker
-        uses: ArtemSBulgakov/buildozer-action@v1
-        id: buildozer
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          command: buildozer android debug
-          workdir: .
-          buildozer_version: stable
+          python-version: '3.10'
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git zip unzip autoconf libtool \
+            pkg-config zlib1g-dev libncurses5-dev \
+            cmake libffi-dev libssl-dev \
+            libltdl-dev
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install buildozer cython virtualenv
+
+      - name: Set up Android SDK
+        run: |
+          mkdir -p ~/.buildozer/android/platform
+          cd ~/.buildozer/android/platform
+
+          # Download command line tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-11076708_latest.zip
+          mkdir -p android-sdk/cmdline-tools/latest
+          mv cmdline-tools/* android-sdk/cmdline-tools/latest/
+
+          # Accept licenses and install SDK components
+          export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
+          yes | android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
+          android-sdk/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-33" \
+            "build-tools;33.0.2" \
+            "platform-tools"
+
+      - name: Build APK
+        run: |
+          export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
+          export PATH=$ANDROID_SDK_ROOT/platform-tools:$PATH
+          buildozer android debug 2>&1
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: gesture-tv-apk
-          path: ${{ steps.buildozer.outputs.filename }}
+          path: bin/*.apk
