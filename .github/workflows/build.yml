@@ -16,7 +16,7 @@ jobs:
 
       - name: Build APK
         run: |
-          cd gesture_tv_android
+          cd apk
           buildozer android debug
 
       - name: Upload APK
