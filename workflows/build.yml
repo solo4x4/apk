@@ -3,24 +3,66 @@ on: [push]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
+    runs-on: ubuntu-22.04
 
-      - name: Install dependencies
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install system dependencies
         run: |
-          sudo apt-get install -y git zip unzip openjdk-17-jdk \
-            python3-pip autoconf libtool pkg-config \
-            zlib1g-dev libncurses5-dev cmake libffi-dev libssl-dev
-          pip install buildozer cython
+          sudo apt-get update
+          sudo apt-get install -y \
+            git zip unzip autoconf libtool \
+            pkg-config zlib1g-dev libncurses5-dev \
+            cmake libffi-dev libssl-dev libltdl-dev
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install buildozer cython virtualenv
+
+      - name: Set up Android SDK
+        run: |
+          SDK_ROOT=~/.buildozer/android/platform/android-sdk
+          mkdir -p $SDK_ROOT/cmdline-tools
+
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-11076708_latest.zip -d $SDK_ROOT/cmdline-tools
+          mv $SDK_ROOT/cmdline-tools/cmdline-tools $SDK_ROOT/cmdline-tools/latest
+
+          # Symlinks for old path buildozer expects
+          mkdir -p $SDK_ROOT/tools/bin
+          ln -sf $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/sdkmanager
+          ln -sf $SDK_ROOT/cmdline-tools/latest/bin/avdmanager $SDK_ROOT/tools/bin/avdmanager
+
+          export ANDROID_SDK_ROOT=$SDK_ROOT
+          yes | $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
+          $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-33" \
+            "build-tools;33.0.2" \
+            "platform-tools" \
+            "ndk;25.2.9519653"
 
       - name: Build APK
         run: |
-          cd gesture_tv_android
-          buildozer android debug
+          export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
+          export ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/25.2.9519653
+          export PATH=$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/tools/bin:$PATH
+          buildozer -v android debug 2>&1
 
       - name: Upload APK
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: gesture-tv-apk
-          path: gesture_tv_android/bin/*.apk
+          path: bin/*.apk
