@@ -16,7 +16,7 @@ jobs:
 
       - name: Build APK
         run: |
-          cd apk
+          cd solo4x4/apk
           buildozer android debug
 
       - name: Upload APK
