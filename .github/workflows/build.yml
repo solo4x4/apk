@@ -25,8 +25,7 @@ jobs:
           sudo apt-get install -y \
             git zip unzip autoconf libtool \
             pkg-config zlib1g-dev libncurses5-dev \
-            cmake libffi-dev libssl-dev \
-            libltdl-dev
+            cmake libffi-dev libssl-dev libltdl-dev
 
       - name: Install Python dependencies
         run: |
@@ -35,27 +34,40 @@ jobs:
 
       - name: Set up Android SDK
         run: |
-          mkdir -p ~/.buildozer/android/platform
-          cd ~/.buildozer/android/platform
+          SDK_ROOT=~/.buildozer/android/platform/android-sdk
+          mkdir -p $SDK_ROOT/cmdline-tools
 
           # Download command line tools
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q commandlinetools-linux-11076708_latest.zip
-          mkdir -p android-sdk/cmdline-tools/latest
-          mv cmdline-tools/* android-sdk/cmdline-tools/latest/
+          unzip -q commandlinetools-linux-11076708_latest.zip -d $SDK_ROOT/cmdline-tools
+          mv $SDK_ROOT/cmdline-tools/cmdline-tools $SDK_ROOT/cmdline-tools/latest
 
-          # Accept licenses and install SDK components
-          export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
-          yes | android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
-          android-sdk/cmdline-tools/latest/bin/sdkmanager \
+          # Create OLD path that buildozer expects
+          mkdir -p $SDK_ROOT/tools/bin
+          ln -sf $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/sdkmanager
+          ln -sf $SDK_ROOT/cmdline-tools/latest/bin/avdmanager $SDK_ROOT/tools/bin/avdmanager
+
+          # Accept licenses and install components
+          export ANDROID_SDK_ROOT=$SDK_ROOT
+          yes | $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
+          $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
             "platforms;android-33" \
             "build-tools;33.0.2" \
-            "platform-tools"
+            "platform-tools" \
+            "ndk;25.2.9519653"
+
+      - name: Configure buildozer to use existing SDK
+        run: |
+          SDK_ROOT=~/.buildozer/android/platform/android-sdk
+          # Tell buildozer where SDK and NDK already are
+          sed -i "s|#android.sdk_path =|android.sdk_path = $SDK_ROOT|" buildozer.spec
+          sed -i "s|#android.ndk_path =|android.ndk_path = $SDK_ROOT/ndk/25.2.9519653|" buildozer.spec
 
       - name: Build APK
         run: |
           export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
-          export PATH=$ANDROID_SDK_ROOT/platform-tools:$PATH
+          export ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/25.2.9519653
+          export PATH=$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/tools/bin:$PATH
           buildozer android debug 2>&1
 
       - name: Upload APK
